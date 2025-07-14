@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Profit Card Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="manifest" href="manifest.json" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f2f2;
+      padding: 30px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark {
+      background: #121212;
+      color: #ffffff;
+    }
+    .container {
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      max-width: 500px;
+      width: 100%;
+      transition: background 0.3s;
+    }
+    body.dark .container {
+      background: #1f1f1f;
+      color: #ffffff;
+    }
+    h2 {
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 15px;
+      width: 100%;
+      padding: 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .toggle-dark {
+      background-color: #333;
+      margin-top: 10px;
+    }
+    .card {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f8f8f8;
+      border-left: 5px solid #4CAF50;
+      border-radius: 5px;
+      white-space: pre-wrap;
+    }
+    .loss {
+      border-left-color: red;
+    }
+    .neutral {
+      border-left-color: gray;
+    }
+    #chartContainer {
+      margin-top: 20px;
+    }
+    canvas {
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    @media print {
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Profit Card Generator</h2>
+
+    <label for="cp">Cost Price (₹):</label>
+    <input type="number" id="cp" placeholder="Enter cost price" />
+
+    <label for="sp">Selling Price (₹):</label>
+    <input type="number" id="sp" placeholder="Enter selling price" />
+
+    <label for="qty">Quantity:</label>
+    <input type="number" id="qty" placeholder="Enter quantity" />
+
+    <button onclick="generateCard()">Generate Profit Card</button>
+    <button onclick="window.print()" class="no-print">🖨️ Print</button>
+    <button onclick="downloadPDF()" class="no-print">📄 Export to PDF</button>
+    <button onclick="toggleDarkMode()" class="toggle-dark no-print">🌓 Toggle Dark Mode</button>
+
+    <div id="result" class="card" style="display:none;"></div>
+
+    <div id="chartContainer" style="display:none;">
+      <h3>Profit/Loss Chart</h3>
+      <canvas id="profitChart" width="400" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(() => console.log('Service Worker Registered'))
+        .catch(err => console.log('Service Worker registration failed:', err));
+    }
+
+    let chart; // for Chart.js
+
+    function generateCard() {
+      const cp = parseFloat(document.getElementById('cp').value);
+      const sp = parseFloat(document.getElementById('sp').value);
+      const qty = parseInt(document.getElementById('qty').value);
+      const resultDiv = document.getElementById('result');
+
+      if (isNaN(cp) || isNaN(sp) || isNaN(qty)) {
+        alert("Please enter valid numbers in all fields.");
+        return;
+      }
+
+      const totalCP = cp * qty;
+      const totalSP = sp * qty;
+      const profit = totalSP - totalCP;
+
+      let status = '';
+      let statusClass = '';
+
+      if (profit > 0) {
+        status = `Profit: ₹${profit.toFixed(2)}`;
+        statusClass = '';
+      } else if (profit < 0) {
+        status = `Loss: ₹${Math.abs(profit).toFixed(2)}`;
+        statusClass = 'loss';
+      } else {
+        status = "No Profit No Loss";
+        statusClass = 'neutral';
+      }
+
+      resultDiv.innerText = `
+-------- PROFIT CARD --------
+Cost Price (each): ₹${cp.toFixed(2)}
+Selling Price (each): ₹${sp.toFixed(2)}
+Quantity: ${qty}
+------------------------------
+Total Cost Price: ₹${totalCP.toFixed(2)}
+Total Selling Price: ₹${totalSP.toFixed(2)}
+------------------------------
+${status}
+      `.trim();
+
+      resultDiv.className = `card ${statusClass}`;
+      resultDiv.style.display = 'block';
+
+      drawChart(totalCP, totalSP);
+    }
+
+    function drawChart(totalCP, totalSP) {
+      const ctx = document.getElementById('profitChart').getContext('2d');
+      document.getElementById('chartContainer').style.display = 'block';
+
+      if (chart) chart.destroy();
+
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Total Cost Price', 'Total Selling Price'],
+          datasets: [{
+            label: 'Amount (₹)',
+            data: [totalCP, totalSP],
+            backgroundColor: ['#f44336', '#4CAF50']
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark');
+    }
+
+    async function downloadPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const result = document.getElementById('result').innerText;
+      if (!result) {
+        alert("Please generate the profit card first!");
+        return;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Profit Card Summary", 20, 20);
+      doc.setFontSize(12);
+      doc.text(result, 20, 30);
+
+      doc.save("profit_card.pdf");
+    }
+  </script>
+</body>
+</html>
